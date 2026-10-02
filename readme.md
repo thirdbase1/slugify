@@ -309,6 +309,54 @@ slugify('foo bar');
 //=> 'foo-bar'
 ```
 
+### slugify.count(string, options?)
+
+Returns an object with the slug and the number of characters that were removed while slugifying it.
+
+Takes the same options as [`slugify()`](#slugifystring-options).
+
+#### slug
+
+Type: `string`
+
+The slug, exactly as [`slugify()`](#slugifystring-options) would return it.
+
+#### removedCount
+
+Type: `number`
+
+The number of characters that were removed.
+
+Characters that are dropped outright, like `!` or `_`, are counted, and so are the characters that are swallowed when a run of them collapses into a single separator. Characters that are swapped one-for-one are not counted, so a space that becomes the separator or `é` that becomes `e` adds nothing. Neither do characters the slugification adds, like the ` and ` that `&` expands to.
+
+#### Example
+
+```js
+import slugify from '@sindresorhus/slugify';
+
+slugify.count('Hello, World!');
+//=> {slug: 'hello-world', removedCount: 2}
+
+slugify.count('Foo Bar');
+//=> {slug: 'foo-bar', removedCount: 0}
+
+slugify.count('foo  bar');
+//=> {slug: 'foo-bar', removedCount: 1}
+
+slugify.count('Déjà Vu!');
+//=> {slug: 'deja-vu', removedCount: 1}
+
+slugify.count('   ');
+//=> {slug: '', removedCount: 3}
+
+slugify.count('foo | bar', {
+	customReplacements: [
+		['|', ' or ']
+	]
+});
+//=> {slug: 'foo-or-bar', removedCount: 2}
+```
+
 ## Related
 
 - [slugify-cli](https://github.com/sindresorhus/slugify-cli) - CLI for this module

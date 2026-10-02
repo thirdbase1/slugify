@@ -54,23 +54,33 @@ const buildPatternSlug = options => {
 	return new RegExp(`[^${negationSetPattern}]+`, flags);
 };
 
-export default function slugify(string, options) {
+// Record how many characters a transformation dropped. The removals are counted per step rather than as one difference between the input and the slug, because a step can insert characters too (the separator, the space `decamelize` adds) and those insertions must not offset the removals. Steps that never remove anything, like lowercasing, are left unmeasured.
+const recordRemovals = (removals, before, after) => {
+	if (removals) {
+		removals.count += Math.max(0, before.length - after.length);
+	}
+};
+
+const assertString = string => {
 	if (typeof string !== 'string') {
 		throw new TypeError(`Expected a string, got \`${typeof string}\``);
 	}
+};
 
-	options = {
-		separator: '-',
-		lowercase: true,
-		decamelize: true,
-		customReplacements: [],
-		preserveLeadingUnderscore: false,
-		preserveTrailingDash: false,
-		preserveCharacters: [],
-		transliterate: true,
-		...options,
-	};
+const normalizeOptions = options => ({
+	separator: '-',
+	lowercase: true,
+	decamelize: true,
+	customReplacements: [],
+	preserveLeadingUnderscore: false,
+	preserveTrailingDash: false,
+	preserveCharacters: [],
+	transliterate: true,
+	...options,
+});
 
+// The whole pipeline lives here so that `slugify()` and `slugify.count()` can never disagree on the slug. `removals` is only passed by `slugify.count()`, which uses it to count the characters the pipeline drops.
+const slugifyString = (string, options, removals) => {
 	const shouldPrependUnderscore = options.preserveLeadingUnderscore && string.startsWith('_');
 	const shouldAppendDash = options.preserveTrailingDash && string.endsWith('-');
 
@@ -80,16 +90,22 @@ export default function slugify(string, options) {
 			...options.customReplacements,
 		]);
 
-		string = transliterate(string, {customReplacements, locale: options.locale});
+		const transliterated = transliterate(string, {customReplacements, locale: options.locale});
+		recordRemovals(removals, string, transliterated);
+		string = transliterated;
 	} else if (options.customReplacements.length > 0) {
 		// Apply custom replacements even when transliteration is disabled
 		for (const [key, value] of options.customReplacements) {
-			string = string.replaceAll(key, value);
+			const replaced = string.replaceAll(key, value);
+			recordRemovals(removals, string, replaced);
+			string = replaced;
 		}
 	}
 
 	if (options.decamelize) {
-		string = decamelize(string);
+		const decamelized = decamelize(string);
+		recordRemovals(removals, string, decamelized);
+		string = decamelized;
 	}
 
 	const patternSlug = buildPatternSlug(options);
@@ -103,13 +119,22 @@ export default function slugify(string, options) {
 		? /([a-z\d])['\u2019]([ts])(?![a-z\d])/gi
 		: /([\p{L}\p{N}])['\u2019]([ts])(?![\p{L}\p{N}])/giu;
 
-	string = string.replaceAll(contractionPattern, '$1$2');
+	const contracted = string.replaceAll(contractionPattern, '$1$2');
+	recordRemovals(removals, string, contracted);
+	string = contracted;
 
-	string = string.replace(patternSlug, options.separator);
-	string = string.replaceAll('\\', '');
+	const slugified = string.replace(patternSlug, options.separator);
+	recordRemovals(removals, string, slugified);
+	string = slugified;
+
+	const withoutBackslashes = string.replaceAll('\\', '');
+	recordRemovals(removals, string, withoutBackslashes);
+	string = withoutBackslashes;
 
 	if (options.separator) {
-		string = removeMootSeparators(string, options.separator);
+		const separated = removeMootSeparators(string, options.separator);
+		recordRemovals(removals, string, separated);
+		string = separated;
 	}
 
 	if (shouldPrependUnderscore) {
@@ -121,7 +146,23 @@ export default function slugify(string, options) {
 	}
 
 	return string;
+};
+
+export default function slugify(string, options) {
+	assertString(string);
+
+	return slugifyString(string, normalizeOptions(options));
 }
+
+// Slugify a string and report how many characters the slugification removed, so that `slugify.count('Hello, World!')` returns `{slug: 'hello-world', removedCount: 2}`. The removals are counted per step of the pipeline, so a character that is swapped one-for-one, like a space that becomes the separator or `é` that becomes `e`, is not counted.
+slugify.count = (string, options) => {
+	assertString(string);
+
+	const removals = {count: 0};
+	const slug = slugifyString(string, normalizeOptions(options), removals);
+
+	return {slug, removedCount: removals.count};
+};
 
 export function slugifyWithCounter() {
 	const occurrences = new Map();

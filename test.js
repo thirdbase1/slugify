@@ -363,3 +363,129 @@ test('slugifyWithCounter() is not vulnerable to ReDoS', t => {
 
 	t.true(duration < 5000, `Took ${duration.toFixed(0)}ms`);
 });
+
+test('slugify.count()', t => {
+	// The slug is exactly the one `slugify()` returns.
+	t.deepEqual(slugify.count('Foo Bar'), {slug: 'foo-bar', removedCount: 0});
+	t.deepEqual(slugify.count('foo bar baz'), {slug: 'foo-bar-baz', removedCount: 0});
+	t.deepEqual(slugify.count('foo bar'), {slug: 'foo-bar', removedCount: 0});
+	// `decamelize` inserts a space rather than removing a character.
+	t.deepEqual(slugify.count('fooBar'), {slug: 'foo-bar', removedCount: 0});
+
+	// Characters that are dropped outright are counted.
+	t.deepEqual(slugify.count('Hello, World!'), {slug: 'hello-world', removedCount: 2});
+	t.deepEqual(slugify.count('[foo] [bar]'), {slug: 'foo-bar', removedCount: 4});
+	t.deepEqual(slugify.count('__foo__'), {slug: 'foo', removedCount: 4});
+
+	// Only the characters beyond the one a run collapses into are removed.
+	t.deepEqual(slugify.count('foo  bar'), {slug: 'foo-bar', removedCount: 1});
+	t.deepEqual(slugify.count('       foo bar'), {slug: 'foo-bar', removedCount: 7});
+	t.deepEqual(slugify.count('   '), {slug: '', removedCount: 3});
+
+	// Unicode is transliterated one character at a time, so nothing is removed.
+	t.deepEqual(slugify.count('Déjà Vu!'), {slug: 'deja-vu', removedCount: 1});
+	t.deepEqual(slugify.count('Foo ÿ'), {slug: 'foo-y', removedCount: 0});
+	t.deepEqual(slugify.count('я люблю единорогов'), {slug: 'ya-lyublyu-edinorogov', removedCount: 0});
+	t.deepEqual(slugify.count('Déjà Vu', {transliterate: false}), {slug: 'déjà-vu', removedCount: 0});
+
+	// The apostrophe of a contraction is dropped.
+	t.deepEqual(slugify.count('Conway\'s Law'), {slug: 'conways-law', removedCount: 1});
+
+	t.is(typeof slugify.count('foo bar').removedCount, 'number');
+});
+
+test('slugify.count() counts the characters a custom replacement removes', t => {
+	t.deepEqual(slugify.count('foo | bar', {
+		customReplacements: [
+			['|', ' or '],
+		],
+	}), {slug: 'foo-or-bar', removedCount: 2});
+
+	t.deepEqual(slugify.count('x.y.z', {
+		customReplacements: [
+			['.', ''],
+		],
+	}), {slug: 'xyz', removedCount: 2});
+
+	// Custom replacements also run when transliteration is disabled.
+	t.deepEqual(slugify.count('foo & bar', {
+		transliterate: false,
+		customReplacements: [
+			['&', ' and '],
+		],
+	}), {slug: 'foo-and-bar', removedCount: 2});
+});
+
+test('slugify.count() respects the options', t => {
+	// A multi-character separator leaves nothing to collapse.
+	t.deepEqual(slugify.count('aaa bbb', {separator: ''}), {slug: 'aaabbb', removedCount: 1});
+	t.deepEqual(slugify.count('a   b   c', {separator: '__'}), {slug: 'a__b__c', removedCount: 2});
+	t.deepEqual(slugify.count('-foo-', {separator: ''}), {slug: 'foo', removedCount: 2});
+
+	t.deepEqual(slugify.count('BAR&baz', {lowercase: false}), {slug: 'BAR-and-baz', removedCount: 0});
+	t.deepEqual(slugify.count('fooBar', {decamelize: false}), {slug: 'foobar', removedCount: 0});
+
+	t.deepEqual(slugify.count('foo#bar', {preserveCharacters: ['#']}), {slug: 'foo#bar', removedCount: 0});
+	t.deepEqual(slugify.count('_foo_bar', {preserveLeadingUnderscore: true}), {slug: '_foo-bar', removedCount: 1});
+	t.deepEqual(slugify.count('foo bar-', {preserveTrailingDash: true}), {slug: 'foo-bar-', removedCount: 1});
+
+	t.deepEqual(slugify.count('foo | bar', {
+		customReplacements: [
+			['|', ' or '],
+		],
+		separator: '_',
+	}), {slug: 'foo_or_bar', removedCount: 2});
+});
+
+test('slugify.count() with an empty string', t => {
+	t.deepEqual(slugify.count(''), {slug: '', removedCount: 0});
+
+	// Everything is removed when nothing survives.
+	t.deepEqual(slugify.count('___'), {slug: '', removedCount: 3});
+	t.deepEqual(slugify.count('!@#'), {slug: '', removedCount: 3});
+	t.deepEqual(slugify.count('   ', {separator: ''}), {slug: '', removedCount: 3});
+});
+
+test('slugify.count() returns the same slug as slugify()', t => {
+	const strings = [
+		'Foo Bar',
+		'foo bar baz',
+		'Déjà Vu!',
+		'fooBar 123 $#%',
+		'I ♥ Dogs',
+		'[foo] [bar]',
+		'Conway\'s Law',
+		'ünïcödé tëst',
+		'',
+		'   ',
+		'__foo__',
+	];
+	const optionSets = [
+		undefined,
+		{separator: '_'},
+		{separator: ''},
+		{separator: '__'},
+		{lowercase: false},
+		{decamelize: false},
+		{transliterate: false},
+		{preserveCharacters: ['#']},
+		{preserveLeadingUnderscore: true},
+		{preserveTrailingDash: true},
+		{customReplacements: [['|', ' or ']]},
+	];
+
+	for (const string of strings) {
+		for (const options of optionSets) {
+			t.is(slugify.count(string, options).slug, slugify(string, options));
+		}
+	}
+});
+
+test('slugify.count() throws for non-string input', t => {
+	t.throws(() => {
+		slugify.count(42);
+	});
+	t.throws(() => {
+		slugify.count();
+	});
+});

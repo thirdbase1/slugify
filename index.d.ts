@@ -220,7 +220,28 @@ slugify('я люблю единорогов');
 //=> 'ya-lyublyu-edinorogov'
 ```
 */
-export default function slugify(string: string, options?: Options): string;
+export type Slugify = {
+	(string: string, options?: Options): string;
+	/**
+	Slugify a string and report how many characters the slugification removed.
+
+	@example
+	```
+	import slugify from '@sindresorhus/slugify';
+
+	slugify.count('Hello, World!');
+	//=> {slug: 'hello-world', removedCount: 2}
+
+	slugify.count('Déjà Vu!');
+	//=> {slug: 'deja-vu', removedCount: 1}
+	```
+	*/
+	count: (string: string, options?: Options) => SlugCount;
+};
+
+declare const slugify: Slugify;
+
+export default slugify;
 
 export type CountableSlugify = {
 	/**
@@ -286,6 +307,31 @@ export type CountableSlugify = {
 	You can then use `slugifyWithCounter()` to generate unique HTML `id`'s to ensure anchors will link to the right headline.
 	*/
 	(string: string, options?: Options): string;
+};
+
+export type SlugCount = {
+	/**
+	The slug, exactly as `slugify()` would return it.
+	*/
+	readonly slug: string;
+
+	/**
+	The number of characters that were removed while slugifying.
+
+	Characters that are dropped outright, like `!` or `_`, are counted, and so are the characters that are swallowed when a run of them collapses into a single separator. Characters that are swapped one-for-one are not counted, so a space that becomes the separator or `é` that becomes `e` adds nothing. Neither do characters the slugification adds, like the ` and ` that `&` expands to.
+
+	@example
+	```
+	import slugify from '@sindresorhus/slugify';
+
+	slugify.count('Hello, World!').removedCount;
+	//=> 2
+
+	slugify.count('foo  bar').removedCount;
+	//=> 1
+	```
+	*/
+	readonly removedCount: number;
 };
 
 export function slugifyWithCounter(): CountableSlugify;
