@@ -388,6 +388,10 @@ test('slugify.count()', t => {
 	t.deepEqual(slugify.count('я люблю единорогов'), {slug: 'ya-lyublyu-edinorogov', removedCount: 0});
 	t.deepEqual(slugify.count('Déjà Vu', {transliterate: false}), {slug: 'déjà-vu', removedCount: 0});
 
+	// A mix of Unicode, punctuation and digits. `ö` expands to `oe` rather than being removed, while the space that follows each punctuation mark is swallowed by the separator it becomes.
+	t.deepEqual(slugify.count('Hello, Wörld! 123'), {slug: 'hello-woerld-123', removedCount: 2});
+	t.deepEqual(slugify.count('Hello, Wörld! 123', {separator: '_'}), {slug: 'hello_woerld_123', removedCount: 2});
+
 	// The apostrophe of a contraction is dropped.
 	t.deepEqual(slugify.count('Conway\'s Law'), {slug: 'conways-law', removedCount: 1});
 
